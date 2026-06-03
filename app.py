@@ -13,7 +13,7 @@ from sqlalchemy import create_engine
 # CONFIG
 # ============================================================
 st.set_page_config(
-    page_title="Focal Systems OOS Dashboard",
+    page_title="Focal Systems OOS Dashboard by Manikandan Sankaran",
     page_icon="📊",
     layout="wide"
 )
