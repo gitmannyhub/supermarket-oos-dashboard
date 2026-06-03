@@ -1,6 +1,6 @@
 # ============================================================
 # Focal Systems OOS Dashboard
-# Author: Mani
+# Author: Mani Sankaran
 # Database: interview_db (MySQL local)
 # ============================================================
 
@@ -223,9 +223,9 @@ ORDER BY estimated_lost_revenue DESC
 SQL_CHRONIC_OOS = """
 WITH OOS_DATA AS (
     SELECT product_id,
-    COUNT(DISTINCT date)                                             AS distinct_oos_days,
-    COUNT(DISTINCT oos_id)                                          AS total_oos_events,
-    ROUND(AVG(TIMESTAMPDIFF(MINUTE, start_time, end_time)), 1)     AS avg_duration_mins,
+    COUNT(DISTINCT date)                                              AS distinct_oos_days,
+    COUNT(DISTINCT oos_id)                                           AS total_oos_events,
+    ROUND(AVG(TIMESTAMPDIFF(MINUTE, start_time, end_time)), 1)      AS avg_duration_mins,
     ROUND(SUM(TIMESTAMPDIFF(MINUTE, start_time, end_time)) / 60, 1) AS total_oos_hours
     FROM out_of_stocks WHERE stage = 'valid'
     GROUP BY product_id
@@ -251,8 +251,9 @@ ORDER BY distinct_oos_days DESC
 # ============================================================
 # APP HEADER
 # ============================================================
-st.title("📊 Focal Systems -- OOS Analytics Dashboard")
+st.title("📊 Focal Systems -- OOS Analytics Dashboard | Mani Sankaran")
 st.markdown("**Store 101 | US/Eastern | Data: May 2025 -- Apr 2026**")
+st.success("👋 Welcome John Gleason and Deniz Tekalp -- thank you for the opportunity!")
 st.divider()
 
 # ============================================================
@@ -276,6 +277,24 @@ tabs = st.tabs([
 with tabs[0]:
     st.header("📋 Executive Summary")
 
+    st.markdown("""
+    ### What is this?
+    This section provides a **complete product-level overview** of out-of-stock performance 
+    across the entire store over the past 12 months. It combines OOS frequency, duration, 
+    revenue impact and resolution rates into a single unified view.
+
+    ### Why does it matter?
+    Out-of-stock events directly impact **customer satisfaction and revenue**. When a product 
+    is unavailable, customers either substitute with a competitor product, leave empty-handed, 
+    or lose trust in the store. This summary helps operations managers **prioritise which products 
+    need urgent attention** based on business impact -- not just frequency.
+
+    ### What does it resolve?
+    By flagging products as HIGH / MEDIUM / LOW risk, this view enables the team to **focus 
+    replenishment and supply chain efforts** where they matter most, reducing revenue leakage 
+    and improving the customer shopping experience.
+    """)
+
     st.info("""
     **Key Findings:**
     - Product **10140** is the highest risk -- 324 OOS events, £17,319 estimated lost revenue
@@ -286,7 +305,6 @@ with tabs[0]:
 
     df = run_query(SQL_EXECUTIVE_SUMMARY)
 
-    # KPI metrics
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total Products with OOS", len(df))
     col2.metric("High Risk Products", len(df[df['risk_flag'] == 'HIGH RISK']))
@@ -295,12 +313,10 @@ with tabs[0]:
 
     st.divider()
 
-    # Risk flag filter
     risk_filter = st.selectbox("Filter by Risk", ["All", "HIGH RISK", "MEDIUM RISK", "LOW RISK"])
     if risk_filter != "All":
         df = df[df['risk_flag'] == risk_filter]
 
-    # Chart
     fig = px.bar(
         df.head(15),
         x='product_id',
@@ -327,6 +343,25 @@ with tabs[0]:
 # ============================================================
 with tabs[1]:
     st.header("⏱ OOS Duration by Product")
+
+    st.markdown("""
+    ### What is this?
+    This section measures **how long each product stays out of stock** once an OOS event is 
+    detected by the AI camera system. Duration is calculated from the moment the OOS is 
+    detected to when the shelf is confirmed restocked.
+
+    ### Why does it matter?
+    A long OOS duration means customers are facing empty shelves for extended periods. 
+    Even if a product goes OOS infrequently, a consistently long resolution time has a 
+    significant **cumulative revenue and customer experience impact**. It also signals 
+    operational inefficiency -- stock may exist somewhere in the store but isn't being 
+    found quickly enough.
+
+    ### What does it resolve?
+    Identifying products with long avg durations helps operations teams **target training, 
+    staffing and back-room organisation** to speed up shelf replenishment for the most 
+    time-sensitive products.
+    """)
 
     st.info("""
     **Key Findings:**
@@ -360,6 +395,25 @@ with tabs[1]:
 # ============================================================
 with tabs[2]:
     st.header("🔄 Resolution Analysis")
+
+    st.markdown("""
+    ### What is this?
+    This section breaks down **how OOS events are resolved** -- whether by a human staff 
+    member finding stock and filling the shelf, by the Focal algorithm detecting automatic 
+    recovery, or by a cycle count confirming no stock is available anywhere.
+
+    ### Why does it matter?
+    Understanding resolution type directly impacts **operational staffing and process design**. 
+    A high cycle count rate means stock management is broken upstream -- products are being 
+    sold without proper replenishment. A high algo fill rate may indicate staff are not 
+    engaging with the Focal system proactively. Customers are directly affected when shelves 
+    stay empty longer due to slow or failed resolution.
+
+    ### What does it resolve?
+    This analysis helps management **identify process gaps** -- whether to invest in better 
+    back-room organisation, staff training on the Focal app, or upstream inventory management 
+    to prevent stock from running out entirely.
+    """)
 
     st.info("""
     **Key Findings:**
@@ -407,6 +461,25 @@ with tabs[2]:
 # ============================================================
 with tabs[3]:
     st.header("👤 User Performance")
+
+    st.markdown("""
+    ### What is this?
+    This section analyses the **performance of individual store staff** when responding to 
+    OOS alerts generated by the Focal camera system. It measures response time, task volume 
+    and resolution success rate per user.
+
+    ### Why does it matter?
+    Staff response time is a critical driver of OOS duration. A faster response means 
+    **shorter shelf gaps, less lost revenue and better customer experience**. Significant 
+    variation between users may indicate training gaps, workload imbalance or engagement 
+    differences with the Focal platform. Customers benefit directly when staff respond quickly 
+    and successfully find stock to refill shelves.
+
+    ### What does it resolve?
+    This analysis supports **targeted coaching and performance management** -- identifying 
+    top performers to learn from and flagging users who may need additional support or 
+    training on the Focal system.
+    """)
 
     st.info("""
     **Key Findings:**
@@ -460,6 +533,25 @@ with tabs[3]:
 with tabs[4]:
     st.header("🔁 Products with Highest Cycle Count Rate")
 
+    st.markdown("""
+    ### What is this?
+    This section identifies products where staff **consistently cannot find stock** to 
+    refill shelves when an OOS event is triggered. A cycle count means the worker confirmed 
+    no sellable inventory is available and the system inventory was zeroed out.
+
+    ### Why does it matter?
+    A high cycle count rate is a strong signal of **upstream supply chain failure**. It means 
+    the store is repeatedly running out of physical stock -- not just misplacing it. Customers 
+    experience persistent empty shelves for these products, often leading to lost sales and 
+    switching to competitor stores. These products represent a **systemic risk** rather than 
+    an operational one.
+
+    ### What does it resolve?
+    This analysis enables the buying and supply chain team to **investigate root causes** -- 
+    whether it's supplier reliability, reorder point misconfiguration, demand forecasting 
+    errors or shrinkage -- and take corrective action before more revenue is lost.
+    """)
+
     st.info("""
     **Key Findings:**
     - **Product 10033** was cycle counted **66.7%** of the time -- most problematic product
@@ -494,6 +586,23 @@ with tabs[4]:
 # ============================================================
 with tabs[5]:
     st.header("📅 OOS Events by Day of Week")
+
+    st.markdown("""
+    ### What is this?
+    This section analyses the **distribution of OOS events and resolution times across 
+    days of the week**, using store-local Eastern time for accurate day attribution.
+
+    ### Why does it matter?
+    OOS patterns vary by day due to differences in customer traffic, delivery schedules 
+    and staffing levels. Understanding which days are most problematic allows operations 
+    managers to **proactively adjust staffing and stock replenishment schedules**. Customers 
+    visiting on high-OOS days are more likely to encounter empty shelves and leave dissatisfied.
+
+    ### What does it resolve?
+    This analysis supports **smarter workforce scheduling and delivery planning** -- ensuring 
+    adequate staff coverage on days with highest OOS frequency and slowest resolution times, 
+    directly improving shelf availability and customer satisfaction.
+    """)
 
     st.info("""
     **Key Findings:**
@@ -543,6 +652,25 @@ with tabs[5]:
 with tabs[6]:
     st.header("📦 Inventory Level at Time of OOS")
 
+    st.markdown("""
+    ### What is this?
+    This section reconstructs the **actual inventory level recorded just before each OOS 
+    event was detected** by the camera system. It uses the full inventory history table to 
+    find the most recent stock update before the OOS start time.
+
+    ### Why does it matter?
+    Understanding the inventory level at the point of OOS detection reveals whether the 
+    **system knew stock was depleted before cameras flagged it**, or whether inventory records 
+    were inaccurate. Negative inventory values indicate data quality issues -- the system 
+    believed stock existed when it did not. Customers are impacted when inventory systems 
+    fail to trigger timely replenishment orders.
+
+    ### What does it resolve?
+    This analysis highlights **inventory data integrity issues** and helps calibrate the 
+    gap between physical stock and system records -- enabling better demand forecasting, 
+    earlier replenishment triggers and more accurate OOS detection thresholds.
+    """)
+
     st.info("""
     **Key Findings:**
     - Many products go OOS with **0 inventory** -- expected behaviour
@@ -579,6 +707,25 @@ with tabs[6]:
 # ============================================================
 with tabs[7]:
     st.header("💰 Estimated Lost Revenue Due to OOS")
+
+    st.markdown("""
+    ### What is this?
+    This section calculates the **estimated revenue lost for each product** due to OOS 
+    events over the past year. It combines the total hours each product was out of stock 
+    with its average hourly sales rate (based on 15 store open hours per day).
+
+    ### Why does it matter?
+    Lost revenue due to OOS is one of the most **direct and quantifiable business impacts** 
+    of poor shelf availability. Every hour a high-value product sits empty on the shelf is 
+    money the store will never recover. Customers who cannot find what they need may switch 
+    to competitor stores permanently -- making the long-term impact even greater than the 
+    immediate revenue loss.
+
+    ### What does it resolve?
+    This analysis provides a **clear financial case** for investing in shelf replenishment 
+    improvements, smarter reorder point configuration and better staff engagement with the 
+    Focal platform -- helping leadership prioritise operational improvements with measurable ROI.
+    """)
 
     st.info("""
     **Key Findings:**
@@ -623,6 +770,26 @@ with tabs[7]:
 # ============================================================
 with tabs[8]:
     st.header("🚨 Chronic OOS Products")
+
+    st.markdown("""
+    ### What is this?
+    This section identifies products that have experienced OOS events on **more than 30 
+    distinct days** over the past year -- meaning they are not just occasionally going OOS 
+    but are **persistently and repeatedly unavailable** to customers.
+
+    ### Why does it matter?
+    Chronic OOS products represent a **structural supply chain or replenishment failure** 
+    rather than a one-off operational issue. Customers who repeatedly find these products 
+    unavailable will eventually stop looking for them in this store entirely -- causing 
+    permanent revenue loss and erosion of brand loyalty. For high-value chronic OOS products 
+    the combined financial impact can be devastating.
+
+    ### What does it resolve?
+    This analysis enables leadership to **escalate specific products for supply chain review** 
+    -- whether that means renegotiating supplier terms, increasing safety stock levels, 
+    adjusting reorder points or investigating whether demand forecasting is accurately 
+    capturing true customer demand for these products.
+    """)
 
     st.info("""
     **Key Findings:**
@@ -678,6 +845,6 @@ with tabs[8]:
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: grey;'>
-    Focal Systems OOS Dashboard | Built with Streamlit + MySQL | Mani
+    Focal Systems OOS Dashboard | Built with Streamlit + MySQL | Mani Sankaran
 </div>
 """, unsafe_allow_html=True)
