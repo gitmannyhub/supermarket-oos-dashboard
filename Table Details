@@ -1,0 +1,47 @@
+All 7 Tables -- Column Reference
+
+stores
+
+store_id, chain_id, time_zone, open_time, close_time
+
+products
+
+product_id, store_id, case_pack
+
+out_of_stocks
+
+oos_id, store_id, product_id, stage, date,
+start_time, end_time, max_end_time,
+created_at, updated_at, state
+
+action_tasks
+
+task_id, task_type, oos_id, user_id,
+assigned_at, action_taken, actioned_at,
+is_algo_fill, created_at, updated_at
+
+product_inventory_levels
+
+inventory_level_id, product_id, inventory_level
+
+product_inventory_history
+
+inventory_history_id, inventory_level_id,
+action_type, inventory_level, inventory_level_before,
+date, created_at
+
+product_sales_records
+
+product_sales_id, start_date, end_date,
+product_id, price, sales_volume,
+created_at, updated_at
+
+
+Key Reminders
+
+Column	Note
+stage	Filter = 'valid' always
+action_taken	'FILLED' or 'CYCLE_COUNT'
+is_algo_fill	0 = human, 1 = algorithmic
+start_time / end_time	UTC -- convert if displaying
+date	Already local date
