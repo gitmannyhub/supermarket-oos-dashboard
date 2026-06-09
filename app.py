@@ -1,19 +1,19 @@
 # ============================================================
-# Focal Systems OOS Dashboard
+# Supermarket OOS Analytics Dashboard
 # Author: Mani Sankaran
-# Database: interview_db (MySQL local)
+# Database: supermarket_oos.db (SQLite3)
 # ============================================================
 
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from sqlalchemy import create_engine
+import sqlite3
 
 # ============================================================
 # CONFIG
 # ============================================================
 st.set_page_config(
-    page_title="Focal Systems OOS Dashboard by Manikandan Sankaran",
+    page_title="Supermarket OOS Analytics Dashboard",
     page_icon="📊",
     layout="wide"
 )
@@ -22,26 +22,26 @@ st.set_page_config(
 # DATABASE CONNECTION
 # ============================================================
 @st.cache_resource
-def get_engine():
-    return create_engine("mysql+pymysql://root@127.0.0.1/interview_db")
+def get_connection():
+    return sqlite3.connect("supermarket_oos.db", check_same_thread=False)
 
 @st.cache_data
 def run_query(sql):
-    with get_engine().connect() as conn:
-        return pd.read_sql(sql, conn)
+    conn = get_connection()
+    return pd.read_sql_query(sql, conn)
 
 # ============================================================
-# SQL QUERIES
+# SQL QUERIES -- SQLite Compatible
 # ============================================================
 
 SQL_EXECUTIVE_SUMMARY = """
 WITH OOS_DATA AS (
     SELECT
         product_id,
-        COUNT(DISTINCT oos_id)                                           AS total_oos_events,
-        COUNT(DISTINCT date)                                             AS distinct_oos_days,
-        ROUND(AVG(TIMESTAMPDIFF(MINUTE, start_time, end_time)), 1)      AS avg_duration_mins,
-        ROUND(SUM(TIMESTAMPDIFF(MINUTE, start_time, end_time)) / 60, 1) AS total_oos_hours
+        COUNT(DISTINCT oos_id)                                                                          AS total_oos_events,
+        COUNT(DISTINCT date)                                                                            AS distinct_oos_days,
+        ROUND(AVG(CAST((julianday(end_time) - julianday(start_time)) * 24 * 60 AS INTEGER)), 1)        AS avg_duration_mins,
+        ROUND(SUM(CAST((julianday(end_time) - julianday(start_time)) * 24 * 60 AS INTEGER)) / 60.0, 1) AS total_oos_hours
     FROM out_of_stocks
     WHERE stage = 'valid'
     GROUP BY product_id
@@ -49,8 +49,8 @@ WITH OOS_DATA AS (
 REV_DATA AS (
     SELECT
         product_id,
-        ROUND(AVG(price * sales_volume), 2)      AS avg_daily_revenue,
-        ROUND(AVG(price * sales_volume) / 15, 2) AS avg_hourly_revenue
+        ROUND(AVG(price * sales_volume), 2)       AS avg_daily_revenue,
+        ROUND(AVG(price * sales_volume) / 15, 2)  AS avg_hourly_revenue
     FROM product_sales_records
     GROUP BY product_id
 ),
@@ -91,9 +91,9 @@ SQL_OOS_DURATION = """
 SELECT
     product_id,
     COUNT(*) AS total_oos_events,
-    ROUND(AVG(TIMESTAMPDIFF(MINUTE, start_time, end_time)), 1) AS avg_duration_mins,
-    MAX(TIMESTAMPDIFF(MINUTE, start_time, end_time)) AS max_duration_mins,
-    MIN(TIMESTAMPDIFF(MINUTE, start_time, end_time)) AS min_duration_mins
+    ROUND(AVG(CAST((julianday(end_time) - julianday(start_time)) * 24 * 60 AS INTEGER)), 1) AS avg_duration_mins,
+    MAX(CAST((julianday(end_time) - julianday(start_time)) * 24 * 60 AS INTEGER))           AS max_duration_mins,
+    MIN(CAST((julianday(end_time) - julianday(start_time)) * 24 * 60 AS INTEGER))           AS min_duration_mins
 FROM out_of_stocks
 WHERE stage = 'valid'
 GROUP BY product_id
@@ -109,9 +109,9 @@ SELECT
         ELSE 'Cycle Count'
     END AS resolution_type,
     COUNT(DISTINCT oos.oos_id) AS total_events,
-    ROUND(AVG(TIMESTAMPDIFF(MINUTE, start_time, end_time)), 1) AS avg_duration_mins,
-    ROUND(SUM(CASE WHEN action_taken = 'FILLED' THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 1) AS pct_resolved,
-    ROUND(AVG(TIMESTAMPDIFF(MINUTE, start_time, actioned_at)), 1) AS avg_response_mins
+    ROUND(AVG(CAST((julianday(end_time) - julianday(start_time)) * 24 * 60 AS INTEGER)), 1)        AS avg_duration_mins,
+    ROUND(SUM(CASE WHEN action_taken = 'FILLED' THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 1)         AS pct_resolved,
+    ROUND(AVG(CAST((julianday(actioned_at) - julianday(start_time)) * 24 * 60 AS INTEGER)), 1)     AS avg_response_mins
 FROM action_tasks act
 JOIN out_of_stocks oos ON oos.oos_id = act.oos_id
 WHERE oos.stage = 'valid'
@@ -123,9 +123,9 @@ SQL_USER_PERFORMANCE = """
 SELECT
     user_id,
     COUNT(*) AS total_tasks,
-    SUM(CASE WHEN action_taken = 'FILLED' THEN 1 ELSE 0 END) AS filled_count,
+    SUM(CASE WHEN action_taken = 'FILLED' THEN 1 ELSE 0 END)      AS filled_count,
     SUM(CASE WHEN action_taken = 'CYCLE_COUNT' THEN 1 ELSE 0 END) AS cycle_count_count,
-    ROUND(AVG(TIMESTAMPDIFF(MINUTE, start_time, actioned_at)), 1) AS avg_response_mins
+    ROUND(AVG(CAST((julianday(actioned_at) - julianday(start_time)) * 24 * 60 AS INTEGER)), 1) AS avg_response_mins
 FROM action_tasks acts
 JOIN out_of_stocks oos ON acts.oos_id = oos.oos_id
 WHERE stage = 'valid'
@@ -138,7 +138,7 @@ ORDER BY avg_response_mins
 SQL_CYCLE_COUNT_RATE = """
 SELECT
     product_id,
-    SUM(CASE WHEN action_taken = 'FILLED' THEN 1 ELSE 0 END) AS filled_count,
+    SUM(CASE WHEN action_taken = 'FILLED' THEN 1 ELSE 0 END)      AS filled_count,
     SUM(CASE WHEN action_taken = 'CYCLE_COUNT' THEN 1 ELSE 0 END) AS cycle_count,
     ROUND(SUM(CASE WHEN action_taken = 'CYCLE_COUNT' THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 1) AS cycle_count_pct
 FROM action_tasks acts
@@ -153,24 +153,47 @@ LIMIT 10
 
 SQL_DAY_OF_WEEK = """
 SELECT
-    DAYNAME(CONVERT_TZ(start_time, 'UTC', 'US/Eastern')) AS day_of_week,
+    CASE strftime('%w', datetime(start_time, '-5 hours'))
+        WHEN '0' THEN 'Sunday'
+        WHEN '1' THEN 'Monday'
+        WHEN '2' THEN 'Tuesday'
+        WHEN '3' THEN 'Wednesday'
+        WHEN '4' THEN 'Thursday'
+        WHEN '5' THEN 'Friday'
+        WHEN '6' THEN 'Saturday'
+    END AS day_of_week,
     COUNT(*) AS total_oos_events,
-    ROUND(AVG(TIMESTAMPDIFF(MINUTE, start_time, end_time)), 1) AS avg_duration_mins
+    ROUND(AVG(CAST((julianday(end_time) - julianday(start_time)) * 24 * 60 AS INTEGER)), 1) AS avg_duration_mins
 FROM out_of_stocks
 WHERE stage = 'valid'
 GROUP BY day_of_week
-ORDER BY FIELD(day_of_week, 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')
+ORDER BY CASE day_of_week
+    WHEN 'Monday'    THEN 1
+    WHEN 'Tuesday'   THEN 2
+    WHEN 'Wednesday' THEN 3
+    WHEN 'Thursday'  THEN 4
+    WHEN 'Friday'    THEN 5
+    WHEN 'Saturday'  THEN 6
+    WHEN 'Sunday'    THEN 7
+END
 """
 
 SQL_INVENTORY_AT_OOS = """
 WITH oos_data AS (
-    SELECT oos_id, product_id, date AS oos_date,
-    CONVERT_TZ(start_time, 'UTC', 'US/Eastern') AS oos_start_local,
-    start_time
-    FROM out_of_stocks WHERE stage = 'valid'
+    SELECT
+        oos_id,
+        product_id,
+        date AS oos_date,
+        datetime(start_time, '-5 hours') AS oos_start_local,
+        start_time
+    FROM out_of_stocks
+    WHERE stage = 'valid'
 ),
 last_inv_before_oos AS (
-    SELECT o.oos_id, o.product_id, MAX(pih.created_at) AS last_inv_time
+    SELECT
+        o.oos_id,
+        o.product_id,
+        MAX(pih.created_at) AS last_inv_time
     FROM oos_data o
     JOIN product_inventory_levels pil ON o.product_id = pil.product_id
     JOIN product_inventory_history pih ON pil.inventory_level_id = pih.inventory_level_id
@@ -195,16 +218,19 @@ LIMIT 20
 
 SQL_LOST_REVENUE = """
 WITH OOS_DATA AS (
-    SELECT product_id,
-    COUNT(*) AS total_oos_events,
-    ROUND(SUM(TIMESTAMPDIFF(MINUTE, start_time, end_time)) / 60, 1) AS total_oos_hours
-    FROM out_of_stocks WHERE stage = 'valid'
+    SELECT
+        product_id,
+        COUNT(*) AS total_oos_events,
+        ROUND(SUM(CAST((julianday(end_time) - julianday(start_time)) * 24 * 60 AS INTEGER)) / 60.0, 1) AS total_oos_hours
+    FROM out_of_stocks
+    WHERE stage = 'valid'
     GROUP BY product_id
 ),
 REV_DATA AS (
-    SELECT product_id,
-    ROUND(AVG(price * sales_volume), 2) AS avg_daily_revenue,
-    ROUND(AVG(price * sales_volume) / 15, 2) AS avg_hourly_revenue
+    SELECT
+        product_id,
+        ROUND(AVG(price * sales_volume), 2)      AS avg_daily_revenue,
+        ROUND(AVG(price * sales_volume) / 15, 2) AS avg_hourly_revenue
     FROM product_sales_records
     GROUP BY product_id
 )
@@ -222,18 +248,21 @@ ORDER BY estimated_lost_revenue DESC
 
 SQL_CHRONIC_OOS = """
 WITH OOS_DATA AS (
-    SELECT product_id,
-    COUNT(DISTINCT date)                                              AS distinct_oos_days,
-    COUNT(DISTINCT oos_id)                                           AS total_oos_events,
-    ROUND(AVG(TIMESTAMPDIFF(MINUTE, start_time, end_time)), 1)      AS avg_duration_mins,
-    ROUND(SUM(TIMESTAMPDIFF(MINUTE, start_time, end_time)) / 60, 1) AS total_oos_hours
-    FROM out_of_stocks WHERE stage = 'valid'
+    SELECT
+        product_id,
+        COUNT(DISTINCT date)                                                                            AS distinct_oos_days,
+        COUNT(DISTINCT oos_id)                                                                          AS total_oos_events,
+        ROUND(AVG(CAST((julianday(end_time) - julianday(start_time)) * 24 * 60 AS INTEGER)), 1)        AS avg_duration_mins,
+        ROUND(SUM(CAST((julianday(end_time) - julianday(start_time)) * 24 * 60 AS INTEGER)) / 60.0, 1) AS total_oos_hours
+    FROM out_of_stocks
+    WHERE stage = 'valid'
     GROUP BY product_id
     HAVING COUNT(DISTINCT date) > 30
 ),
 REV_DATA AS (
-    SELECT product_id,
-    ROUND(AVG(price * sales_volume) / 15, 2) AS avg_hourly_revenue
+    SELECT
+        product_id,
+        ROUND(AVG(price * sales_volume) / 15, 2) AS avg_hourly_revenue
     FROM product_sales_records
     GROUP BY product_id
 )
@@ -251,9 +280,8 @@ ORDER BY distinct_oos_days DESC
 # ============================================================
 # APP HEADER
 # ============================================================
-st.title("📊 Focal Systems -- OOS Analytics Dashboard | Mani Sankaran")
+st.title("📊 Supermarket Out Of Stock (OOS) Analytics Dashboard | Mani Sankaran")
 st.markdown("**Store 101 | US/Eastern | Data: May 2025 -- Apr 2026**")
-st.success("👋 Welcome John Gleason and Deniz Tekalp -- thank you for the opportunity!")
 st.divider()
 
 # ============================================================
@@ -279,20 +307,20 @@ with tabs[0]:
 
     st.markdown("""
     ### What is this?
-    This section provides a **complete product-level overview** of out-of-stock performance 
-    across the entire store over the past 12 months. It combines OOS frequency, duration, 
-    revenue impact and resolution rates into a single unified view.
+    A complete product-level overview of out-of-stock performance across the store over 
+    the past 12 months. Combines OOS frequency, duration, revenue impact and resolution 
+    rates into a single unified view.
 
     ### Why does it matter?
-    Out-of-stock events directly impact **customer satisfaction and revenue**. When a product 
-    is unavailable, customers either substitute with a competitor product, leave empty-handed, 
-    or lose trust in the store. This summary helps operations managers **prioritise which products 
-    need urgent attention** based on business impact -- not just frequency.
+    Out-of-stock events directly impact customer satisfaction and revenue. Customers who 
+    cannot find products leave empty-handed or switch to competitors permanently. This view 
+    helps operations managers prioritise which products need urgent attention based on 
+    business impact -- not just frequency.
 
     ### What does it resolve?
-    By flagging products as HIGH / MEDIUM / LOW risk, this view enables the team to **focus 
-    replenishment and supply chain efforts** where they matter most, reducing revenue leakage 
-    and improving the customer shopping experience.
+    By flagging products as HIGH / MEDIUM / LOW risk, this enables the team to focus 
+    replenishment and supply chain efforts where they matter most -- reducing revenue 
+    leakage and improving the customer shopping experience.
     """)
 
     st.info("""
@@ -346,28 +374,26 @@ with tabs[1]:
 
     st.markdown("""
     ### What is this?
-    This section measures **how long each product stays out of stock** once an OOS event is 
-    detected by the AI camera system. Duration is calculated from the moment the OOS is 
-    detected to when the shelf is confirmed restocked.
+    Measures how long each product stays out of stock once an OOS event is detected by 
+    the AI camera system. Duration is calculated from detection to confirmed restock.
 
     ### Why does it matter?
-    A long OOS duration means customers are facing empty shelves for extended periods. 
-    Even if a product goes OOS infrequently, a consistently long resolution time has a 
-    significant **cumulative revenue and customer experience impact**. It also signals 
-    operational inefficiency -- stock may exist somewhere in the store but isn't being 
-    found quickly enough.
+    A long OOS duration means customers face empty shelves for extended periods. Even 
+    infrequent OOS events with consistently long resolution times create significant 
+    cumulative revenue and customer experience impact. It also signals operational 
+    inefficiency -- stock may exist in the store but isn't being found quickly enough.
 
     ### What does it resolve?
-    Identifying products with long avg durations helps operations teams **target training, 
-    staffing and back-room organisation** to speed up shelf replenishment for the most 
-    time-sensitive products.
+    Identifying products with long average durations helps operations teams target 
+    training, staffing and back-room organisation to speed up replenishment for the 
+    most time-sensitive products.
     """)
 
     st.info("""
     **Key Findings:**
     - Product **10091** has the worst avg OOS duration at **192.6 mins** (over 3 hours!)
     - Product **10076** averages **165 mins** per OOS event
-    - Product **10140** has a **negative min duration (-12 mins)** -- data quality issue worth investigating
+    - Product **10140** has a **negative min duration (-12 mins)** -- data quality issue
     - Only products with more than 5 OOS events are included
     """)
 
@@ -398,30 +424,28 @@ with tabs[2]:
 
     st.markdown("""
     ### What is this?
-    This section breaks down **how OOS events are resolved** -- whether by a human staff 
-    member finding stock and filling the shelf, by the Focal algorithm detecting automatic 
-    recovery, or by a cycle count confirming no stock is available anywhere.
+    Breaks down how OOS events are resolved -- whether by a human staff member finding 
+    stock, by algorithmic detection of automatic recovery, or by a cycle count confirming 
+    no stock is available.
 
     ### Why does it matter?
-    Understanding resolution type directly impacts **operational staffing and process design**. 
-    A high cycle count rate means stock management is broken upstream -- products are being 
-    sold without proper replenishment. A high algo fill rate may indicate staff are not 
-    engaging with the Focal system proactively. Customers are directly affected when shelves 
-    stay empty longer due to slow or failed resolution.
+    Understanding resolution type directly impacts operational staffing and process design. 
+    A high cycle count rate means stock management is broken upstream. A high algo fill 
+    rate may indicate staff are not engaging proactively. Customers are directly affected 
+    when shelves stay empty longer due to slow or failed resolution.
 
     ### What does it resolve?
-    This analysis helps management **identify process gaps** -- whether to invest in better 
-    back-room organisation, staff training on the Focal app, or upstream inventory management 
-    to prevent stock from running out entirely.
+    Helps management identify process gaps -- whether to invest in better back-room 
+    organisation, staff training, or upstream inventory management to prevent stock 
+    running out entirely.
     """)
 
     st.info("""
     **Key Findings:**
     - **68.7%** of OOS events resolved by human FILLED
-    - **20.8%** resolved algorithmically (algo fill) -- no human intervention
+    - **20.8%** resolved algorithmically -- no human intervention needed
     - **10.5%** ended in CYCLE_COUNT -- no stock found anywhere
-    - Algo fills paradoxically take **longer (192.2 mins)** vs human fills (117.8 mins)
-      because algo detection waits for natural shelf recovery
+    - Algo fills take **longer (192.2 mins)** vs human fills (117.8 mins)
     - CYCLE_COUNT has **0% resolution** -- stock could not be found
     """)
 
@@ -464,21 +488,18 @@ with tabs[3]:
 
     st.markdown("""
     ### What is this?
-    This section analyses the **performance of individual store staff** when responding to 
-    OOS alerts generated by the Focal camera system. It measures response time, task volume 
-    and resolution success rate per user.
+    Analyses the performance of individual store staff when responding to OOS alerts. 
+    Measures response time, task volume and resolution success rate per user.
 
     ### Why does it matter?
     Staff response time is a critical driver of OOS duration. A faster response means 
-    **shorter shelf gaps, less lost revenue and better customer experience**. Significant 
+    shorter shelf gaps, less lost revenue and better customer experience. Significant 
     variation between users may indicate training gaps, workload imbalance or engagement 
-    differences with the Focal platform. Customers benefit directly when staff respond quickly 
-    and successfully find stock to refill shelves.
+    differences with the system.
 
     ### What does it resolve?
-    This analysis supports **targeted coaching and performance management** -- identifying 
-    top performers to learn from and flagging users who may need additional support or 
-    training on the Focal system.
+    Supports targeted coaching and performance management -- identifying top performers 
+    to learn from and flagging users who may need additional support or training.
     """)
 
     st.info("""
@@ -535,29 +556,28 @@ with tabs[4]:
 
     st.markdown("""
     ### What is this?
-    This section identifies products where staff **consistently cannot find stock** to 
-    refill shelves when an OOS event is triggered. A cycle count means the worker confirmed 
-    no sellable inventory is available and the system inventory was zeroed out.
+    Identifies products where staff consistently cannot find stock to refill shelves 
+    when an OOS event is triggered. A cycle count means no sellable inventory was 
+    found and the system inventory was zeroed out.
 
     ### Why does it matter?
-    A high cycle count rate is a strong signal of **upstream supply chain failure**. It means 
-    the store is repeatedly running out of physical stock -- not just misplacing it. Customers 
-    experience persistent empty shelves for these products, often leading to lost sales and 
-    switching to competitor stores. These products represent a **systemic risk** rather than 
-    an operational one.
+    A high cycle count rate signals upstream supply chain failure. The store is 
+    repeatedly running out of physical stock -- not just misplacing it. Customers 
+    experience persistent empty shelves, leading to lost sales and switching to 
+    competitor stores. These products represent systemic risk.
 
     ### What does it resolve?
-    This analysis enables the buying and supply chain team to **investigate root causes** -- 
-    whether it's supplier reliability, reorder point misconfiguration, demand forecasting 
-    errors or shrinkage -- and take corrective action before more revenue is lost.
+    Enables the buying and supply chain team to investigate root causes -- supplier 
+    reliability, reorder point misconfiguration, demand forecasting errors or shrinkage 
+    -- before more revenue is lost.
     """)
 
     st.info("""
     **Key Findings:**
-    - **Product 10033** was cycle counted **66.7%** of the time -- most problematic product
+    - **Product 10033** cycle counted **66.7%** of the time -- most problematic
     - **Products 10096 and 10028** at 50% cycle count rate
-    - A high cycle count rate suggests **systemic inventory issues** for these products
-    - Stock is consistently unavailable even in back rooms or alternate locations
+    - High cycle count rate = systemic inventory issues not operational ones
+    - Stock consistently unavailable even in back rooms
     - Only top 10 products shown
     """)
 
@@ -589,28 +609,27 @@ with tabs[5]:
 
     st.markdown("""
     ### What is this?
-    This section analyses the **distribution of OOS events and resolution times across 
-    days of the week**, using store-local Eastern time for accurate day attribution.
+    Analyses the distribution of OOS events and resolution times across days of the 
+    week using store-local time for accurate day attribution.
 
     ### Why does it matter?
     OOS patterns vary by day due to differences in customer traffic, delivery schedules 
-    and staffing levels. Understanding which days are most problematic allows operations 
-    managers to **proactively adjust staffing and stock replenishment schedules**. Customers 
-    visiting on high-OOS days are more likely to encounter empty shelves and leave dissatisfied.
+    and staffing levels. Understanding which days are most problematic allows managers 
+    to proactively adjust staffing and stock replenishment schedules. Customers visiting 
+    on high-OOS days are more likely to encounter empty shelves.
 
     ### What does it resolve?
-    This analysis supports **smarter workforce scheduling and delivery planning** -- ensuring 
-    adequate staff coverage on days with highest OOS frequency and slowest resolution times, 
-    directly improving shelf availability and customer satisfaction.
+    Supports smarter workforce scheduling and delivery planning -- ensuring adequate 
+    staff coverage on days with highest OOS frequency and slowest resolution times.
     """)
 
     st.info("""
     **Key Findings:**
     - **Tuesday** has the most OOS events (315) -- busiest day for stock issues
-    - **Saturday** is the slowest to resolve (170.6 mins avg) -- likely weekend staffing levels
-    - **Thursday** is the fastest to resolve (144.4 mins avg)
-    - Distribution is fairly even across all days (272-315 events per day)
-    - All times converted to US/Eastern local time
+    - **Saturday** slowest to resolve (170.6 mins) -- likely weekend staffing
+    - **Thursday** fastest to resolve (144.4 mins avg)
+    - Fairly even distribution across all days (272-315 events)
+    - All times converted to local store time
     """)
 
     df = run_query(SQL_DAY_OF_WEEK)
@@ -654,27 +673,26 @@ with tabs[6]:
 
     st.markdown("""
     ### What is this?
-    This section reconstructs the **actual inventory level recorded just before each OOS 
-    event was detected** by the camera system. It uses the full inventory history table to 
-    find the most recent stock update before the OOS start time.
+    Reconstructs the actual inventory level recorded just before each OOS event was 
+    detected. Uses the full inventory history table to find the most recent stock 
+    update before each OOS start time.
 
     ### Why does it matter?
-    Understanding the inventory level at the point of OOS detection reveals whether the 
-    **system knew stock was depleted before cameras flagged it**, or whether inventory records 
-    were inaccurate. Negative inventory values indicate data quality issues -- the system 
-    believed stock existed when it did not. Customers are impacted when inventory systems 
-    fail to trigger timely replenishment orders.
+    Understanding inventory at OOS detection reveals whether the system knew stock 
+    was depleted before cameras flagged it, or whether inventory records were inaccurate. 
+    Negative inventory values indicate data quality issues. Customers are impacted when 
+    inventory systems fail to trigger timely replenishment orders.
 
     ### What does it resolve?
-    This analysis highlights **inventory data integrity issues** and helps calibrate the 
-    gap between physical stock and system records -- enabling better demand forecasting, 
-    earlier replenishment triggers and more accurate OOS detection thresholds.
+    Highlights inventory data integrity issues and helps calibrate the gap between 
+    physical stock and system records -- enabling better demand forecasting, earlier 
+    replenishment triggers and more accurate OOS detection thresholds.
     """)
 
     st.info("""
     **Key Findings:**
     - Many products go OOS with **0 inventory** -- expected behaviour
-    - **Product 10127** shows **negative inventory (-2)** before OOS detected -- data quality issue
+    - **Product 10127** shows **negative inventory (-2)** before OOS -- data quality issue
     - Camera detection sometimes **lags behind** actual stock depletion
     - Some products show inventory > 0 when OOS triggered -- suggests misplaced stock
     - Limited to 20 most recent OOS events for performance
@@ -710,21 +728,20 @@ with tabs[7]:
 
     st.markdown("""
     ### What is this?
-    This section calculates the **estimated revenue lost for each product** due to OOS 
-    events over the past year. It combines the total hours each product was out of stock 
-    with its average hourly sales rate (based on 15 store open hours per day).
+    Calculates the estimated revenue lost for each product due to OOS events over 
+    the past year. Combines total hours each product was OOS with its average hourly 
+    sales rate (based on 15 store open hours per day).
 
     ### Why does it matter?
-    Lost revenue due to OOS is one of the most **direct and quantifiable business impacts** 
-    of poor shelf availability. Every hour a high-value product sits empty on the shelf is 
-    money the store will never recover. Customers who cannot find what they need may switch 
-    to competitor stores permanently -- making the long-term impact even greater than the 
-    immediate revenue loss.
+    Lost revenue due to OOS is one of the most direct and quantifiable business 
+    impacts of poor shelf availability. Every hour a high-value product sits empty 
+    is money the store will never recover. Customers who cannot find what they need 
+    may switch to competitor stores permanently.
 
     ### What does it resolve?
-    This analysis provides a **clear financial case** for investing in shelf replenishment 
-    improvements, smarter reorder point configuration and better staff engagement with the 
-    Focal platform -- helping leadership prioritise operational improvements with measurable ROI.
+    Provides a clear financial case for investing in shelf replenishment improvements, 
+    smarter reorder point configuration and better staff engagement -- helping 
+    leadership prioritise operational improvements with measurable ROI.
     """)
 
     st.info("""
@@ -732,8 +749,8 @@ with tabs[7]:
     - **Product 10140** leads with **£17,319** estimated lost revenue across 857 OOS hours
     - **Product 10031** second at **£6,181** across 883 OOS hours
     - Top 5 products account for over **£30,000** in combined lost revenue
-    - Lost revenue = avg hourly revenue × total OOS hours (store open 15 hrs/day)
-    - This is a conservative estimate -- actual impact may be higher due to customer churn
+    - Lost revenue = avg hourly revenue × total OOS hours
+    - Conservative estimate -- actual impact may be higher due to customer churn
     """)
 
     df = run_query(SQL_LOST_REVENUE)
@@ -773,31 +790,30 @@ with tabs[8]:
 
     st.markdown("""
     ### What is this?
-    This section identifies products that have experienced OOS events on **more than 30 
-    distinct days** over the past year -- meaning they are not just occasionally going OOS 
-    but are **persistently and repeatedly unavailable** to customers.
+    Identifies products that experienced OOS events on more than 30 distinct days 
+    over the past year -- products that are not occasionally going OOS but are 
+    persistently and repeatedly unavailable to customers.
 
     ### Why does it matter?
-    Chronic OOS products represent a **structural supply chain or replenishment failure** 
-    rather than a one-off operational issue. Customers who repeatedly find these products 
-    unavailable will eventually stop looking for them in this store entirely -- causing 
-    permanent revenue loss and erosion of brand loyalty. For high-value chronic OOS products 
-    the combined financial impact can be devastating.
+    Chronic OOS products represent a structural supply chain or replenishment failure. 
+    Customers who repeatedly find these products unavailable will eventually stop 
+    looking for them entirely -- causing permanent revenue loss and erosion of brand 
+    loyalty. For high-value chronic OOS products the combined financial impact can 
+    be devastating.
 
     ### What does it resolve?
-    This analysis enables leadership to **escalate specific products for supply chain review** 
-    -- whether that means renegotiating supplier terms, increasing safety stock levels, 
-    adjusting reorder points or investigating whether demand forecasting is accurately 
-    capturing true customer demand for these products.
+    Enables leadership to escalate specific products for supply chain review -- whether 
+    renegotiating supplier terms, increasing safety stock, adjusting reorder points or 
+    investigating whether demand forecasting accurately captures true customer demand.
     """)
 
     st.info("""
     **Key Findings:**
-    - Only **12 products** went OOS on more than 30 distinct days -- these are chronic offenders
+    - Only **12 products** went OOS on more than 30 distinct days -- chronic offenders
     - **Product 10140** went OOS on the most distinct days with highest lost revenue
     - **Product 10031** has the most total OOS events (314) across distinct days
     - Chronic OOS suggests deeper supply chain or inventory management issues
-    - These products should be prioritised for operational review
+    - These products should be prioritised for immediate operational review
     """)
 
     df = run_query(SQL_CHRONIC_OOS)
@@ -845,6 +861,6 @@ with tabs[8]:
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: grey;'>
-    Focal Systems OOS Dashboard | Built with Streamlit + MySQL | Mani Sankaran
+    Supermarket OOS Analytics Dashboard | Built with Streamlit + SQLite | Mani Sankaran
 </div>
 """, unsafe_allow_html=True)
